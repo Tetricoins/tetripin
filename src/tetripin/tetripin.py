@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # coding: utf8
 
 from __future__ import (
@@ -7,9 +8,13 @@ from __future__ import (
     division
 )
 
+
 import os
 import re
 import sys
+import warnings
+
+warnings.filterwarnings('ignore', 'The virtualenv distutils package')
 
 try:
     from path import Path
@@ -41,20 +46,10 @@ except ImportError:
 
 
 # a Few defaults
-HOME_DIR = os.path.expanduser("~")
-DATA_DIR = user_data_dir("tetripin", "tetricoins")
+DATA_DIR = user_data_dir("tetripin", "tetricoins", version="0.1")
 
 
-# Env vars we supports
-def get_setting_dir_path():
-    return os.environ.get('TETRIPIN_DATA_DIR', DATA_DIR)
-
-def get_secrets_file_path():
-    return os.environ.get('TETRIPIN_SECRETS', None)
-
-def get_secrets(ctx, secrets_file):
-    """ Parse TOML file and return secrets """
-    secrets_map = {}
+def get_toml_data(ctx, secrets_file):
     try:
         with open(secrets_file) as f:
             data = toml.load(f)
@@ -100,11 +95,19 @@ def get_secrets(ctx, secrets_file):
         msg = '"account" section is missing from the secrets file "{}"'
         ctx.fail(msg.format(secrets_file))
 
+    return data
+
+
+def get_secrets(ctx, secrets_file):
+    """ Parse TOML file and return secrets """
+    secrets_map = {}
+    data = get_toml_data(ctx, secrets_file)
+
     # Load values from the file and handle missing ones
-    for label, data in secrets.items():
+    for label, infos in data['account'].items():
         label = label.lower().strip()
         if label:
-            secret = data.get('secret', '').strip()
+            secret = infos.get('secret', '').strip()
             if not secret:
                 msg = "Account '{}' don't have a secret."
                 click.fail(msg)
@@ -112,15 +115,15 @@ def get_secrets(ctx, secrets_file):
 
     return secrets_map
 
-@click.group()
+
+@click.group(name="tetripin")
 @click.option(
     '--secrets-file',
-    default=get_secrets_file_path,
     help='Path to the toml files containing the secrets.'
 )
 @click.option(
     '--data-dir',
-    default=get_setting_dir_path,
+    default=DATA_DIR,
     help='Path to settings directory. Set to an empty string to ignore it.',
 )
 @click.pass_context
@@ -196,6 +199,7 @@ def gen(ctx, account):
     # Open the secrets file
     secrets_file = ctx.obj['secrets_file']
     secrets_map = get_secrets(ctx, ctx.obj['secrets_file'])
+    account = account.strip().lower()
 
     if not secrets_map:
         ctx.fail('No account listed in secrets file "{}"'.format(secrets_file))
@@ -205,8 +209,58 @@ def gen(ctx, account):
         ctx.fail(msg.format(account, secrets_file))
 
     # Generate and print the PIN
-    click.echo(pyotp.TOTP(secrets_map[account]).now())
+    try:
+        click.echo(pyotp.TOTP(secrets_map[account]).now())
+    except TypeError:
+        msg = "The secret for account '{}' is not a valid TOTP token"
+        ctx.fail(msg.format(account))
 
+@cli.command()
+@click.argument('account')
+@click.argument('secret')
+@click.pass_context
+def add(ctx, account, secret):
+    """ Add a new account """
+
+    # Open the secrets file
+    secrets_file = ctx.obj['secrets_file']
+    data = get_toml_data(ctx, secrets_file)
+
+    if account in data['account']:
+        click.fail('An account named "{}" already exists.')
+
+    data['account'] = {account: {'secret': secret}}
+
+    with secrets_file.open('w') as f:
+        toml.dump(data, f)
+
+    # Generate and print the PIN
+    click.echo('Account added')
+
+@cli.command()
+@click.argument('account')
+@click.pass_context
+def rm(ctx, account):
+    """ Remove an account """
+
+    # Open the secrets file
+    secrets_file = ctx.obj['secrets_file']
+    data = get_toml_data(ctx, secrets_file)
+
+    if account not in data['account']:
+        click.fail('No account named "{}".')
+
+    res = data['account'].pop(account)
+
+    with secrets_file.open('w') as f:
+        toml.dump(data, f)
+
+    # Generate and print the PIN
+    click.echo('Account removed: {}={}'.format(account, res['secret']))
+
+
+def main():
+    cli(auto_envvar_prefix='TETRIPIN')
 
 if __name__ == '__main__':
-    cli()
+    main()
