@@ -7,7 +7,6 @@ Tetripin is a cli 2FA manager that can generate the one time PIN from your termi
 
 ::
 
-    bash
     $ tetripin add Bittrex JBSWY3DPEHPK3PXP
     Account added
     $ tetripin gen Bittrex
@@ -23,7 +22,7 @@ It works on Windows/Mac/Linux, but support only TOTP with default settings::
     digits = 6
     algorithm = SHA1
 
-You need other settings, open a github issue.
+If you need other settings, open a github issue.
 
 It's written in Python, and works on Python 2 and 3.
 
@@ -43,6 +42,7 @@ Futur
 
 - backup
 - restore
+- rename
 - import
 - read from qrcode local file or url
 - deal with other algo settings

@@ -229,7 +229,7 @@ def add(ctx, account, secret):
     if account in data['account']:
         click.fail('An account named "{}" already exists.')
 
-    data['account'] = {account: {'secret': secret}}
+    data['account'][account] = {'secret': secret}
 
     with secrets_file.open('w') as f:
         toml.dump(data, f)
