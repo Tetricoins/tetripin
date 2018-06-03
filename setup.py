@@ -56,15 +56,16 @@ setuptools.setup(name='tetripin',
                  include_package_data=True,
                  license='MIT',
                  zip_safe=False,
-                entry_points='''
+                 entry_points='''
                     [console_scripts]
                     tetripin=tetripin.tetripin:main
                 ''',
 
                  keywords='TOTP, 2FA',
-                 classifiers=['Development Status :: 1 - Planning',
+                 classifiers=['Development Status :: 3 - Alpha',
                               'Intended Audience :: Developers',
                               'Natural Language :: English',
                               'Programming Language :: Python :: 3',
+                              'Programming Language :: Python :: 3.6'
                               'Programming Language :: Python :: 3.7',
                               'Operating System :: OS Independent'],)
