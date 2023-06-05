@@ -99,3 +99,10 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+.pytest_cache/
+.vscode/
+*.build
+*.dist
+ubuntu_tetripin
+.doit.db

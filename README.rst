@@ -24,7 +24,7 @@ It works on Windows/Mac/Linux, but support only TOTP with default settings::
 
 If you need other settings, open a github issue.
 
-It's written in Python, and works on Python 2 and 3.
+It's written in Python 3.8+.
 
 Installation
 ------------
@@ -32,13 +32,13 @@ Installation
 You need to know how pip works. If you don't, vote on the github issue asking for binaries. Indicate your OS name and version.
 
 ```
-python -m pip install tetripin --user
+python -m pip install tetripin
 ```
 
 Binary may come in the future so you don't have to understand how pip works.
 
-Futur
------
+Future
+-------
 
 - backup
 - restore

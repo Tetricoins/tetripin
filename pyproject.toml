@@ -1,0 +1,17 @@
+[tool]
+[tool.poetry]
+name = "tetripin"
+version = "0.2.0"
+description = "2FA manager"
+license = "MIT"
+keywords = ["TOTP", "2FA"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Operating System :: OS Independent",
+]
+authors = ["Tetricoins <contact@tetricoins.com>"]
+readme = "README.rst"

@@ -1,5 +1,7 @@
-pyotp
-toml
+appdirs
 click
 path.py
-appdirs
+pyotp
+toml # TODO: move to tomli
+cryptography
+keyring

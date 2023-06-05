@@ -9,6 +9,8 @@ name = "pypi"
 
 nuitka = "*"
 scons = "*"
+"flake8" = "*"
+pylint = "*"
 
 
 [packages]
