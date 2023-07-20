@@ -1,4 +1,3 @@
-import base64
 import re
 from typing import Tuple, TypedDict
 import pyotp
@@ -15,6 +14,10 @@ import click
 from cryptography.fernet import Fernet
 
 DATA_DIR = user_data_dir("tetripin", "tetricoins", version="0.1")
+
+
+def encrypt_ascii_text(key, text):
+    return key.encrypt(text.encode("ascii")).decode("ascii")
 
 
 def get_toml_data(ctx, secrets_file):
@@ -89,11 +92,13 @@ def get_secrets(ctx, secrets_file):
     default=DATA_DIR,
     help="Path to settings directory. Set to an empty string to ignore it.",
 )
+
 @click.pass_context
 def cli(ctx, secrets_file, data_dir):
     """2FA code manager"""
 
     if not (key := keyring.get_password("tetripin", "key")):
+        click.echo("This is a new setup. Creating a new encryption key")
         key = Fernet.generate_key()
         keyring.set_password("tetripin", "key", key)
 
@@ -151,9 +156,8 @@ def cli(ctx, secrets_file, data_dir):
             secrets_map = get_secrets(ctx, secrets_file)
 
             for account, secret in secrets_map.items():
-                encrypted_secret = ctx.obj["key"].encrypt(secret.encode("ascii"))
                 enrypted_data["account"][account] = {
-                    "secret": encrypted_secret.decode("ascii")
+                    "secret": encrypt_ascii_text(ctx.obj["key"], secret)
                 }
 
             with secrets_file.open("w", encoding="utf8") as f:
@@ -213,7 +217,6 @@ def gen(ctx, account):
 @click.pass_context
 def add(ctx, account, secret):
     """Add a new account"""
-
     # Open the secrets file
     secrets_file = ctx.obj["secrets_file"]
     data = get_toml_data(ctx, secrets_file)
@@ -224,9 +227,9 @@ def add(ctx, account, secret):
     if data["format_version"] == 1:
         data["account"][account] = {"secret": secret}
     else:
-        encrypted_secret = ctx.obj["key"].encrypt(secret.encode("ascii"))
-        b64_secret = base64.b64encode(encrypted_secret).decode("ascii")
-        data["account"][account] = {"secret": b64_secret}
+        data["account"][account] = {
+            "secret": encrypt_ascii_text(ctx.obj["key"], secret)
+        }
 
     with secrets_file.open("w", encoding="utf8") as f:
         toml.dump(data, f)
