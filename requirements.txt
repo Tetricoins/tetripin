@@ -5,3 +5,5 @@ pyotp
 toml # TODO: move to tomli
 cryptography
 keyring
+textual
+clipman

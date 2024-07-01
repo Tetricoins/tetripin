@@ -11,7 +11,6 @@ def get_version(path="src/tetripin/__init__.py"):
 
 
 def get_requirements(path):
-
     setuppy_format = "https://github.com/{user}/{repo}/tarball/master#egg={egg}"
 
     setuppy_pattern = r"github.com/(?P<user>[^/.]+)/(?P<repo>[^.]+).git#egg=(?P<egg>.+)"
@@ -20,7 +19,6 @@ def get_requirements(path):
     install_requires = []
     with open(path) as f:
         for line in f:
-
             if "sys_platform" in line:
                 line, platform = line.split(";")
 
@@ -56,7 +54,7 @@ setuptools.setup(
     zip_safe=False,
     entry_points="""
                     [console_scripts]
-                    tetripin=tetripin.tetripin:main
+                    tetripin=tetripin.cli:main
                 """,
     keywords="TOTP, 2FA",
     classifiers=[

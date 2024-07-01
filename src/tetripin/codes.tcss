@@ -1,0 +1,45 @@
+CodeLine {
+    layout: horizontal;
+    height: 3;
+    width: 1fr;
+    padding: 1;
+}
+
+CodeLine.odd  {
+    background: $boost;
+}
+
+#code {
+    text-opacity: 60%;
+    content-align: center middle;
+    width: auto;
+}
+
+#account {
+    width: 32;
+}
+
+Header {
+    layout: horizontal;
+    dock: top;
+    width: 1fr;
+    background: $foreground 5%;
+    color: $text;
+    height: 3;
+    padding: 1;
+}
+
+#footer {
+    layout: horizontal;
+    dock: bottom;
+    background: $foreground 5%;
+    color: $text;
+    height: 3;
+    background: $panel;
+}
+
+
+CodeLine:hover {
+    background: $panel-lighten-2;
+    color: $text;
+}

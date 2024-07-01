@@ -2,3 +2,4 @@ black
 doit
 ruff
 Nuitka
+textual-dev

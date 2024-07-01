@@ -1,0 +1,2 @@
+class TetripinError(Exception):
+    pass

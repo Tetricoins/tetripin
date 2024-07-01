@@ -1,3 +1,3 @@
-from tetripin import main
+from tetripin.cli import main
 
 main()
