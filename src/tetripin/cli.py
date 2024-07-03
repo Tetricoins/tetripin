@@ -185,16 +185,17 @@ class AndOTPExportFormat(TypedDict):
     help="App format to use. Only andotp is supported for now.",
     default="andotp",
 )
-@click.argument("path")
 @click.pass_context
-def export(ctx, path, format="andotp"):
+def export(ctx, format="andotp"):
     """Add a new account"""
 
     if format != "andotp":
         ctx.fail("Only andotp is supported for now.")
 
     try:
-        secrets_map = load_secrets_from_toml(ctx.obj["secrets_file"])
+        secrets_map = build_secret_map_from_toml(
+            ctx.obj["key"], ctx.obj["secrets_file"]
+        )
     except TetripinError as e:
         ctx.fail(str(e))
 
@@ -218,10 +219,7 @@ def export(ctx, path, format="andotp"):
             )
         )
 
-    with Path(path).open("w", encoding="utf8") as f:
-        json.dump(export, f, indent=4)
-
-    click.echo("Done")
+    click.echo(json.dumps(export, indent=4))
 
 
 @cli.command()
@@ -314,7 +312,7 @@ def lock(ctx):
     """Remove the password from the OS keyring"""
 
     if click.confirm(
-        "Lock the codes? Make sure you have access to the password. They cannot be recovered with it.",
+        "Lock the codes? Make sure you have access to the password. They cannot be recovered without it.",
         abort=True,
     ):
         keyring.delete_password("tetripin", "key")
