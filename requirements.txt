@@ -7,3 +7,4 @@ cryptography
 keyring
 textual
 clipman
+typing_extensions

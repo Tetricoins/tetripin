@@ -1,6 +1,8 @@
+import getpass
 import re
 
-
+import secrets
+from typing import Union
 import keyring
 from path import Path
 import toml
@@ -9,24 +11,87 @@ from cryptography.fernet import Fernet
 from tetripin.exceptions import TetripinError
 from appdirs import user_data_dir
 import logging
+import base64
+
+
+from cryptography.fernet import Fernet
+from typing_extensions import Self
+
+from cryptography.hazmat.primitives import hashes
+
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 log = logging.getLogger(__name__)
 
 DATA_DIR = user_data_dir("tetripin", "tetricoins", version="0.1")
 
 
-def encrypt_ascii_text(key, text):
-    return key.encrypt(text.encode("ascii")).decode("ascii")
+class EncryptionKey:
+    """Convenience wrapper on top of Fernet primitives"""
+
+    def __init__(self, value):
+        self.bytes = value
+        self.fernet = Fernet(value)
+
+    @classmethod
+    def from_string(cls, value) -> Self:
+        return cls(cls._from_utf8(value))
+
+    @classmethod
+    def from_password(cls, password: str, salt: str) -> Self:
+        """Derive an encryption key from a password and a salt
+
+        Password must be the value as typed as the user, salt must be
+        a base64 encoded number
+        """
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=base64.b64decode(salt),
+            iterations=480000,
+        )
+        value = base64.urlsafe_b64encode(kdf.derive(cls._to_utf8(password)))
+
+        return cls(value)
+
+    def __str__(self):
+        return self._from_utf8(self.bytes)
+
+    @staticmethod
+    def _to_utf8(text) -> bytes:
+        return text.encode("utf8", errors="surrogateescape")
+
+    @staticmethod
+    def _from_utf8(bytes) -> str:
+        return bytes.decode("utf8", errors="surrogateescape")
+
+    def encrypt_to_text(self, text) -> str:
+        return self._from_utf8(self.fernet.encrypt(self._to_utf8(text)))
+
+    def decrypt_from_text(self, text) -> str:
+        return self._from_utf8(self.fernet.decrypt(self._to_utf8(text)))
 
 
-def ensure_key():
-    # todo: use surrogate escape on the key
-    if not (key := keyring.get_password("tetripin", "key")):
-        log.info("This is a new setup. Creating a new encryption key")
-        key = Fernet.generate_key()
-        keyring.set_password("tetripin", "key", key)
+def prompt_password(prompt: str) -> str:
+    print(prompt)
 
-    return Fernet(key)
+    while True:
+        password1 = getpass.getpass("Enter your password: ")
+        password2 = getpass.getpass("Re-enter your password: ")
+
+        if password1 == password2:
+            break
+
+        print("Passwords do not match. Please try again.")
+
+    return password1
+
+
+def get_key_from_keyring() -> Union[EncryptionKey, None]:
+    key = keyring.get_password("tetripin", "key")
+
+    if key:
+        return EncryptionKey(key)
 
 
 def ensure_secrets_file(data_dir=None, secrets_file=None):
@@ -54,7 +119,14 @@ def ensure_secrets_file(data_dir=None, secrets_file=None):
                 # generate an empty file
                 if not secrets_file.isfile():
                     with secrets_file.open("a", encoding="utf8") as f:
-                        toml.dump({"format_version": 2, "account": {}}, f)
+                        toml.dump(
+                            {
+                                "format_version": 2,
+                                "account": {},
+                                "salt": secrets.token_bytes(16),
+                            },
+                            f,
+                        )
                 else:  # update the access time
                     with secrets_file.open("a", encoding="utf8") as f:
                         secrets_file.utime(None)
@@ -115,7 +187,7 @@ def load_secrets_from_toml(secrets_file):
     return data
 
 
-def build_secret_map_from_toml(key, secrets_file):
+def build_secret_map_from_toml(key: Union[EncryptionKey, None], secrets_file):
     secrets_map = {}
     data = load_secrets_from_toml(secrets_file)
 
@@ -126,8 +198,8 @@ def build_secret_map_from_toml(key, secrets_file):
             if not secret:
                 raise TetripinError(f"Account '{label}' don't have a secret.")
 
-            if data["format_version"] > 1:
-                secret = key.decrypt(secret.encode("ascii")).decode("ascii")
+            if key:
+                secret = key.decrypt_from_text(secret)
 
             secrets_map[label] = secret
 

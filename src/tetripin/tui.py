@@ -12,7 +12,7 @@ from tetripin.exceptions import TetripinError
 from tetripin.utils import (
     DATA_DIR,
     build_secret_map_from_toml,
-    ensure_key,
+    get_key_from_keyring,
     ensure_secrets_file,
 )
 
@@ -81,13 +81,24 @@ class TOTPApp(App):
     remaining_time = reactive(30)
 
     def __init__(self, key=None, secrets_file=None, data_dir=DATA_DIR):
-        key = key or ensure_key()
-        try:
-            secrets_file = secrets_file or ensure_secrets_file(data_dir, secrets_file)
-            self.secrets_map = build_secret_map_from_toml(key, secrets_file)
-        except TetripinError as e:
+        key = key or get_key_from_keyring()
+        if not key:
+            self.notify(
+                "Your codes are locked, run 'tetripin unlock' first",
+                severity="error",
+                timeout=10,
+            )
             self.secrets_map = {}
-            self.notify(str(e), severity="error", timeout=10)
+        else:
+            try:
+                secrets_file = secrets_file or ensure_secrets_file(
+                    data_dir, secrets_file
+                )
+                self.secrets_map = build_secret_map_from_toml(key, secrets_file)
+            except TetripinError as e:
+                self.secrets_map = {}
+                self.notify(str(e), severity="error", timeout=10)
+
         self.interval = 30  # TOTP default time interval
 
         super().__init__()
@@ -125,7 +136,7 @@ class TOTPApp(App):
             self.update_code_lines()
 
     @on(Input.Changed)
-    def show_invalid_reasons(self, event: Input.Changed) -> None:
+    def update_code_list_widget(self, event: Input.Changed) -> None:
         self.query_one(Body).codes = self.calculate_codes(self.secrets_map, event.value)
 
     def compose(self) -> ComposeResult:

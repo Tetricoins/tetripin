@@ -1,4 +1,10 @@
+import base64
+import getpass
+import secrets
+import shutil
 from typing import Tuple, TypedDict
+
+import keyring
 import pyotp
 import json
 
@@ -8,15 +14,17 @@ from path import Path
 import toml
 import click
 
-
+from cryptography.fernet import InvalidToken
 from tetripin.exceptions import TetripinError
 from tetripin.tui import TOTPApp
 from tetripin.utils import (
-    ensure_key,
+    EncryptionKey,
+    get_key_from_keyring,
     ensure_secrets_file,
     load_secrets_from_toml,
     build_secret_map_from_toml,
-    encrypt_ascii_text,
+    prompt_password,
+    get_key_from_keyring,
     DATA_DIR,
 )
 
@@ -32,9 +40,8 @@ from tetripin.utils import (
 def cli(ctx, secrets_file, data_dir):
     """2FA code manager"""
 
-    key = ensure_key()
     secrets_file = ensure_secrets_file(data_dir, secrets_file)
-    ctx.obj = {"key": key}
+    ctx.obj = {}
 
     # if we use the old clear text format, attempt to convert it to the encrypted format
     try:
@@ -42,31 +49,17 @@ def cli(ctx, secrets_file, data_dir):
     except TetripinError as e:
         ctx.fail(str(e))
 
-    enrypted_data = {
-        "format_version": 2,
-        "account": {},
-    }
-    if data["format_version"] == 1:
-        if click.confirm(
-            "You have an old encrypted config file. Convert to the new encrypted format?",
-            default=True,
-        ):
-            click.echo("Converting to the new format...")
-            try:
-                secrets_map = build_secret_map_from_toml(ctx.obj["key"], secrets_file)
-            except TetripinError as e:
-                ctx.fail(str(e))
+    key = get_key_from_keyring()
+    if ctx.invoked_subcommand != "upgrade-config":
+        if data["format_version"] != 3:
+            ctx.fail(
+                "You have an old unsecured config file. Run 'tetripin upgrade-config' to secure it."
+            )
 
-            for account, secret in secrets_map.items():
-                enrypted_data["account"][account] = {
-                    "secret": encrypt_ascii_text(ctx.obj["key"], secret)
-                }
+        if not key and ctx.invoked_subcommand != "unlock":
+            ctx.fail("You codes are locked. Use 'tetripin unlock' first.")
 
-            with secrets_file.open("w", encoding="utf8") as f:
-                toml.dump(enrypted_data, f)
-
-            click.echo("Your secrets are now encrypted using your OS keyring.")
-
+    ctx.obj["key"] = key
     ctx.obj["data_dir"] = data_dir
     ctx.obj["secrets_file"] = secrets_file
 
@@ -141,9 +134,7 @@ def add(ctx, account, secret):
     if data["format_version"] == 1:
         data["account"][account] = {"secret": secret}
     else:
-        data["account"][account] = {
-            "secret": encrypt_ascii_text(ctx.obj["key"], secret)
-        }
+        data["account"][account] = {"secret": ctx.obj["key"].encrypt_to_text(secret)}
 
     with secrets_file.open("w", encoding="utf8") as f:
         toml.dump(data, f)
@@ -238,6 +229,99 @@ def export(ctx, path, format="andotp"):
 def tui(ctx):
     app = TOTPApp(ctx.obj["key"], ctx.obj["secrets_file"])
     app.app.run()
+
+
+@cli.command()
+@click.pass_context
+def upgrade_config(ctx):
+    """Upgrade the format of the config file"""
+    secrets_file = ensure_secrets_file(ctx.obj["data_dir"], ctx.obj["secrets_file"])
+
+    try:
+        old_data = load_secrets_from_toml(secrets_file)
+    except TetripinError as e:
+        ctx.fail(str(e))
+
+    if old_data["format_version"] == 3:
+        click.echo("You are already at the last version, nothing to do")
+
+    click.echo(
+        "This is going to convert your old config file to the new encrypted format."
+    )
+
+    backup_file = f'{ctx.obj["secrets_file"]}.bak'
+    shutil.copyfile(ctx.obj["secrets_file"], backup_file)
+    click.echo(f"A backup has been created: {backup_file}")
+
+    old_key = get_key_from_keyring()
+    salt = base64.b64encode(secrets.token_bytes(16)).decode("utf-8")
+    data = {
+        "format_version": 3,
+        "account": {},
+        "salt": salt,
+    }
+    try:
+        secrets_map = build_secret_map_from_toml(old_key, secrets_file)
+    except TetripinError as e:
+        ctx.fail(str(e))
+
+    password = prompt_password("Please chose a password to protect your codes.")
+    new_key = EncryptionKey.from_password(password, salt)
+    keyring.set_password("tetripin", "key", str(new_key))
+
+    for account, secret in secrets_map.items():
+        data["account"][account] = {"secret": new_key.encrypt_to_text(secret)}
+
+    with secrets_file.open("w", encoding="utf8") as f:
+        toml.dump(data, f)
+
+    keyring.set_password("tetripin", "key", str(new_key))
+
+    click.echo("Your secrets are now secured with your password.")
+    click.echo(
+        f"Check that everything works, then delete the backup file: {backup_file}"
+    )
+
+
+@cli.command()
+@click.pass_context
+def unlock(ctx):
+    """Save the password to decrypt the codes in the OS keyring"""
+    secrets_file = ensure_secrets_file(ctx.obj["data_dir"], ctx.obj["secrets_file"])
+
+    try:
+        data = load_secrets_from_toml(secrets_file)
+    except TetripinError as e:
+        ctx.fail(str(e))
+
+    password = getpass.getpass("Enter your password: ")
+    key = EncryptionKey.from_password(password, data["salt"])
+
+    try:
+        build_secret_map_from_toml(key, secrets_file)
+    except TetripinError as e:
+        ctx.fail(str(e))
+    except InvalidToken:
+        ctx.fail("This password is incorrect")
+
+    keyring.set_password("tetripin", "key", str(key))
+    click.echo("Your codes are now unlocked.")
+
+
+@cli.command()
+@click.pass_context
+def lock(ctx):
+    """Remove the password from the OS keyring"""
+
+    if click.confirm(
+        "Lock the codes? Make sure you have access to the password. They cannot be recovered with it.",
+        abort=True,
+    ):
+        keyring.delete_password("tetripin", "key")
+        click.echo("Locking successful")
+    else:
+        # Handle the case where the user does not confirm
+        click.echo("Locking aborded.")
 
 
 def main():
